@@ -42,12 +42,14 @@ function orgAuth(req, res, next) {
 function pubEvent(e) {
   return { id: e.id, slug: e.slug, model: e.model, title: e.title, names: e.names, eyebrow: e.eyebrow,
     sub: e.sub, date: e.date, time: e.time, place: e.place, saveTheDate: !!e.saveTheDate,
+    whenISO: e.whenISO || '', mapUrl: e.mapUrl || '', music: e.music || null,
     ft: e.ft, fn: e.fn, pal: e.pal, motif: e.motif, anim: e.anim, frame: e.frame, layout: e.layout };
 }
 function counts(eventId) {
   const all = readJSON(F.ersvp, {})[eventId] || {};
   const list = Object.values(all);
-  return { total: list.length, going: list.filter(r => r.attending).length, notGoing: list.filter(r => !r.attending).length };
+  const people = list.reduce((s, r) => s + (r.attending ? (1 + (r.guests || 0)) : 0), 0);
+  return { total: list.length, going: list.filter(r => r.attending).length, notGoing: list.filter(r => !r.attending).length, people: people };
 }
 
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 2 }));
@@ -117,6 +119,9 @@ app.post('/api/events', orgAuth, async (req, res) => {
       date: String(b.date || '').slice(0, 40),
       time: String(b.time || '').slice(0, 20),
       place: String(b.place || '').slice(0, 120),
+      whenISO: String(b.whenISO || '').slice(0, 40),
+      mapUrl: String(b.mapUrl || '').slice(0, 300),
+      music: (b.music && typeof b.music === 'object') ? { id: String(b.music.id||'').slice(0,40), name: String(b.music.name||'').slice(0,80), url: String(b.music.url||'').slice(0,400) } : null,
       saveTheDate: !!b.saveTheDate,
       ft: String(b.ft || '').slice(0, 60), fn: String(b.fn || '').slice(0, 60),
       motif: String(b.motif || '').slice(0, 30), anim: String(b.anim || '').slice(0, 20),
@@ -169,7 +174,8 @@ app.post('/api/public/event/:slug/rsvp', async (req, res) => {
     const ref = 'CV-' + crypto.randomBytes(3).toString('hex').toUpperCase();
     const existing = er[e.id][k];
     er[e.id][k] = { name: String(b.name || '').slice(0, 120), phone: String(b.phone || '').slice(0, 40),
-      attending: !!b.attending, ts: Date.now(), ref: existing ? existing.ref : ref };
+      attending: !!b.attending, guests: Math.max(0, Math.min(20, parseInt(b.guests) || 0)),
+      message: String(b.message || '').slice(0, 300), ts: Date.now(), ref: existing ? existing.ref : ref };
     writeJSON(F.ersvp, er);
     out = { ref: er[e.id][k].ref, updated: !!existing };
   });
