@@ -43,6 +43,8 @@ function pubEvent(e) {
   return { id: e.id, slug: e.slug, model: e.model, title: e.title, names: e.names, eyebrow: e.eyebrow,
     sub: e.sub, date: e.date, time: e.time, place: e.place, saveTheDate: !!e.saveTheDate,
     whenISO: e.whenISO || '', mapUrl: e.mapUrl || '', music: e.music || null,
+    photo: e.photo || '', giftUrl: e.giftUrl || '', dressCode: e.dressCode || '',
+    agenda: e.agenda || null, albumUrl: e.albumUrl || '', initials: e.initials || '',
     ft: e.ft, fn: e.fn, pal: e.pal, motif: e.motif, anim: e.anim, frame: e.frame, layout: e.layout };
 }
 function counts(eventId) {
@@ -121,6 +123,12 @@ app.post('/api/events', orgAuth, async (req, res) => {
       place: String(b.place || '').slice(0, 120),
       whenISO: String(b.whenISO || '').slice(0, 40),
       mapUrl: String(b.mapUrl || '').slice(0, 300),
+      photo: String(b.photo || '').slice(0, 500),
+      giftUrl: String(b.giftUrl || '').slice(0, 400),
+      dressCode: String(b.dressCode || '').slice(0, 120),
+      agenda: Array.isArray(b.agenda) ? b.agenda.slice(0, 8).map(a => ({ t: String(a.t||'').slice(0,20), l: String(a.l||'').slice(0,60) })) : null,
+      albumUrl: String(b.albumUrl || '').slice(0, 400),
+      initials: String(b.initials || '').slice(0, 12),
       music: (b.music && typeof b.music === 'object') ? { id: String(b.music.id||'').slice(0,40), name: String(b.music.name||'').slice(0,80), url: String(b.music.url||'').slice(0,400) } : null,
       saveTheDate: !!b.saveTheDate,
       ft: String(b.ft || '').slice(0, 60), fn: String(b.fn || '').slice(0, 60),
