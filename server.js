@@ -3,6 +3,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
 
 const app = express();
 app.use(cors());
@@ -10,6 +11,9 @@ app.use(express.json({ limit: '200kb' }));
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
+const UPLOADS = path.join(DATA_DIR, 'uploads');
+try { fs.mkdirSync(UPLOADS, { recursive: true }); } catch (e) {}
+app.use('/uploads', express.static(UPLOADS, { maxAge: '30d' }));
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin1234';
 
 const F = {
@@ -54,7 +58,21 @@ function counts(eventId) {
   return { total: list.length, going: list.filter(r => r.attending).length, notGoing: list.filter(r => !r.attending).length, people: people };
 }
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 2 }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 3 }));
+
+// Image upload (organizer) — lets the organizer use their own art (e.g. exported from Canva)
+const uploadMw = multer({
+  storage: multer.diskStorage({
+    destination: (q, f, cb) => cb(null, UPLOADS),
+    filename: (q, f, cb) => { const ext = (String(f.originalname).match(/\.[a-zA-Z0-9]+$/) || ['.jpg'])[0].toLowerCase(); cb(null, genId() + ext); }
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (q, f, cb) => cb(null, /^image\//.test(f.mimetype))
+});
+app.post('/api/upload', orgAuth, uploadMw.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+  res.json({ url: '/uploads/' + req.file.filename });
+});
 
 /* ---------- Legacy site-level (demo) ---------- */
 app.get('/api/config', (req, res) => { const c = readJSON(F.conf, {}); res.json({ disabled: c.disabled || [], settings: c.settings || null }); });
