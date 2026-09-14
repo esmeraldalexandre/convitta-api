@@ -58,7 +58,7 @@ function counts(eventId) {
   return { total: list.length, going: list.filter(r => r.attending).length, notGoing: list.filter(r => !r.attending).length, people: people };
 }
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 4 }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 5 }));
 
 // Image upload (organizer) — lets the organizer use their own art (e.g. exported from Canva)
 const uploadMw = multer({
@@ -86,6 +86,65 @@ app.put('/api/config', siteAuth, async (req, res) => {
       name: String(b.settings.name || '').slice(0, 60), tagline: String(b.settings.tagline || '').slice(0, 400),
       accent: /^#[0-9a-fA-F]{6}$/.test(b.settings.accent) ? b.settings.accent : '#6E2A52' };
     writeJSON(F.conf, c); });
+  res.json({ ok: true });
+});
+
+/* ---------- Admin: full management (see everything, edit, reset passwords) ---------- */
+app.get('/api/admin/overview', siteAuth, (req, res) => {
+  const orgs = readJSON(F.orgs, {});
+  const events = Object.values(readJSON(F.events, {}));
+  const er = readJSON(F.ersvp, {});
+  const orgList = Object.values(orgs).map(o => ({
+    id: o.id, name: o.name, phone: o.phone, createdAt: o.createdAt,
+    eventCount: events.filter(e => e.orgId === o.id).length
+  })).sort((a, b) => b.createdAt - a.createdAt);
+  const evList = events.sort((a, b) => b.createdAt - a.createdAt).map(e => {
+    const all = er[e.id] || {};
+    const rsvps = Object.values(all).sort((a, b) => b.ts - a.ts);
+    const org = orgs[e.orgId];
+    return Object.assign(pubEvent(e), {
+      orgId: e.orgId, orgName: org ? org.name : '—', orgPhone: org ? org.phone : '',
+      createdAt: e.createdAt, counts: counts(e.id), rsvps: rsvps
+    });
+  });
+  const going = evList.reduce((s, e) => s + e.counts.going, 0);
+  const responses = evList.reduce((s, e) => s + e.counts.total, 0);
+  res.json({ organizers: orgList, events: evList, totals: { events: evList.length, going, responses, organizers: orgList.length } });
+});
+app.post('/api/admin/reset-password', siteAuth, async (req, res) => {
+  const b = req.body || {};
+  const pw = String(b.password || '');
+  if (pw.length < 4) return res.status(400).json({ error: 'weak_password' });
+  let ok = false;
+  await withLock(() => {
+    const orgs = readJSON(F.orgs, {});
+    const org = orgs[b.orgId];
+    if (org) { org.salt = crypto.randomBytes(8).toString('hex'); org.hash = hashPw(pw, org.salt); writeJSON(F.orgs, orgs); ok = true; }
+  });
+  if (!ok) return res.status(404).json({ error: 'not_found' });
+  res.json({ ok: true });
+});
+const EDITABLE = ['title','names','eyebrow','sub','date','time','place','whenISO','mapUrl','dressCode','giftUrl','initials','albumUrl'];
+app.put('/api/admin/events/:id', siteAuth, async (req, res) => {
+  const b = req.body || {};
+  let out;
+  await withLock(() => {
+    const events = readJSON(F.events, {});
+    const e = events[req.params.id];
+    if (!e) { out = { err: 'not_found' }; return; }
+    EDITABLE.forEach(k => { if (typeof b[k] === 'string') e[k] = b[k].slice(0, 500); });
+    writeJSON(F.events, events);
+    out = { event: pubEvent(e) };
+  });
+  if (out.err) return res.status(404).json({ error: out.err });
+  res.json(out);
+});
+app.delete('/api/admin/events/:id', siteAuth, async (req, res) => {
+  await withLock(() => {
+    const events = readJSON(F.events, {});
+    if (events[req.params.id]) { delete events[req.params.id]; writeJSON(F.events, events);
+      const er = readJSON(F.ersvp, {}); delete er[req.params.id]; writeJSON(F.ersvp, er); }
+  });
   res.json({ ok: true });
 });
 
