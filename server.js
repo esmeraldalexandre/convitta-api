@@ -48,7 +48,7 @@ function pubEvent(e) {
     sub: e.sub, date: e.date, time: e.time, place: e.place, saveTheDate: !!e.saveTheDate,
     whenISO: e.whenISO || '', mapUrl: e.mapUrl || '', music: e.music || null,
     photo: e.photo || '', coverPhoto: e.coverPhoto || '', fullImage: !!e.fullImage, giftUrl: e.giftUrl || '', dressCode: e.dressCode || '',
-    agenda: e.agenda || null, albumUrl: e.albumUrl || '', initials: e.initials || '',
+    agenda: e.agenda || null, gallery: e.gallery || null, albumUrl: e.albumUrl || '', initials: e.initials || '',
     ft: e.ft, fn: e.fn, pal: e.pal, motif: e.motif, anim: e.anim, frame: e.frame, layout: e.layout };
 }
 function counts(eventId) {
@@ -58,7 +58,7 @@ function counts(eventId) {
   return { total: list.length, going: list.filter(r => r.attending).length, notGoing: list.filter(r => !r.attending).length, people: people };
 }
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 3 }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 4 }));
 
 // Image upload (organizer) — lets the organizer use their own art (e.g. exported from Canva)
 const uploadMw = multer({
@@ -147,6 +147,7 @@ app.post('/api/events', orgAuth, async (req, res) => {
       giftUrl: String(b.giftUrl || '').slice(0, 400),
       dressCode: String(b.dressCode || '').slice(0, 120),
       agenda: Array.isArray(b.agenda) ? b.agenda.slice(0, 8).map(a => ({ t: String(a.t||'').slice(0,20), l: String(a.l||'').slice(0,60) })) : null,
+      gallery: Array.isArray(b.gallery) ? b.gallery.slice(0, 12).map(u => String(u||'').slice(0, 500)).filter(Boolean) : null,
       albumUrl: String(b.albumUrl || '').slice(0, 400),
       initials: String(b.initials || '').slice(0, 12),
       music: (b.music && typeof b.music === 'object') ? { id: String(b.music.id||'').slice(0,40), name: String(b.music.name||'').slice(0,80), url: String(b.music.url||'').slice(0,400) } : null,
