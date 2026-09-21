@@ -49,6 +49,7 @@ function pubEvent(e) {
     whenISO: e.whenISO || '', mapUrl: e.mapUrl || '', music: e.music || null,
     photo: e.photo || '', coverPhoto: e.coverPhoto || '', fullImage: !!e.fullImage, giftUrl: e.giftUrl || '', dressCode: e.dressCode || '',
     agenda: e.agenda || null, gallery: e.gallery || null, albumUrl: e.albumUrl || '', initials: e.initials || '',
+    iban: e.iban || '', ibanLabel: e.ibanLabel || '', presentes: e.presentes || null,
     ft: e.ft, fn: e.fn, pal: e.pal, motif: e.motif, anim: e.anim, frame: e.frame, layout: e.layout };
 }
 function counts(eventId) {
@@ -58,7 +59,7 @@ function counts(eventId) {
   return { total: list.length, going: list.filter(r => r.attending).length, notGoing: list.filter(r => !r.attending).length, people: people };
 }
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 5 }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 6 }));
 
 // Image upload (organizer) — lets the organizer use their own art (e.g. exported from Canva)
 const uploadMw = multer({
@@ -124,7 +125,7 @@ app.post('/api/admin/reset-password', siteAuth, async (req, res) => {
   if (!ok) return res.status(404).json({ error: 'not_found' });
   res.json({ ok: true });
 });
-const EDITABLE = ['title','names','eyebrow','sub','date','time','place','whenISO','mapUrl','dressCode','giftUrl','initials','albumUrl'];
+const EDITABLE = ['title','names','eyebrow','sub','date','time','place','whenISO','mapUrl','dressCode','giftUrl','initials','albumUrl','iban','ibanLabel'];
 app.put('/api/admin/events/:id', siteAuth, async (req, res) => {
   const b = req.body || {};
   let out;
@@ -207,6 +208,9 @@ app.post('/api/events', orgAuth, async (req, res) => {
       dressCode: String(b.dressCode || '').slice(0, 120),
       agenda: Array.isArray(b.agenda) ? b.agenda.slice(0, 8).map(a => ({ t: String(a.t||'').slice(0,20), l: String(a.l||'').slice(0,60) })) : null,
       gallery: Array.isArray(b.gallery) ? b.gallery.slice(0, 12).map(u => String(u||'').slice(0, 500)).filter(Boolean) : null,
+      iban: String(b.iban || '').slice(0, 60),
+      ibanLabel: String(b.ibanLabel || '').slice(0, 80),
+      presentes: Array.isArray(b.presentes) ? b.presentes.slice(0, 8).map(g => ({ em: String(g.em||'🎁').slice(0,4), t: String(g.t||'').slice(0,60), d: String(g.d||'').slice(0,120) })) : null,
       albumUrl: String(b.albumUrl || '').slice(0, 400),
       initials: String(b.initials || '').slice(0, 12),
       music: (b.music && typeof b.music === 'object') ? { id: String(b.music.id||'').slice(0,40), name: String(b.music.name||'').slice(0,80), url: String(b.music.url||'').slice(0,400) } : null,
