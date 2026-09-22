@@ -22,7 +22,8 @@ const F = {
   orgs: path.join(DATA_DIR, 'organizers.json'),   // { orgId: {...} }
   tokens: path.join(DATA_DIR, 'tokens.json'),     // { token: orgId }
   events: path.join(DATA_DIR, 'events.json'),     // { eventId: {...} }
-  ersvp: path.join(DATA_DIR, 'event_rsvps.json')  // { eventId: { phoneDigits: {...} } }
+  ersvp: path.join(DATA_DIR, 'event_rsvps.json'), // { eventId: { phoneDigits: {...} } }
+  album: path.join(DATA_DIR, 'album.json')        // { eventId: [ {url, ts} ] }
 };
 
 function readJSON(file, def) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return def; } }
@@ -59,7 +60,7 @@ function counts(eventId) {
   return { total: list.length, going: list.filter(r => r.attending).length, notGoing: list.filter(r => !r.attending).length, people: people };
 }
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 6 }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'convitta-api', v: 7 }));
 
 // Image upload (organizer) — lets the organizer use their own art (e.g. exported from Canva)
 const uploadMw = multer({
@@ -273,6 +274,37 @@ app.post('/api/public/event/:slug/rsvp', async (req, res) => {
   });
   if (out.err) return res.status(404).json({ error: out.err });
   res.json({ ok: true, ref: out.ref, updated: out.updated });
+});
+
+/* ---------- Shared album: guests upload photos of the party (public, no login) ---------- */
+const albumUpload = multer({
+  storage: multer.diskStorage({
+    destination: (q, f, cb) => cb(null, UPLOADS),
+    filename: (q, f, cb) => { const ext = (String(f.originalname).match(/\.[a-zA-Z0-9]+$/) || ['.jpg'])[0].toLowerCase(); cb(null, genId() + ext); }
+  }),
+  limits: { fileSize: 12 * 1024 * 1024 },
+  fileFilter: (q, f, cb) => cb(null, /^image\//.test(f.mimetype))
+});
+app.get('/api/public/event/:slug/album', (req, res) => {
+  const e = Object.values(readJSON(F.events, {})).find(x => x.slug === req.params.slug);
+  if (!e) return res.status(404).json({ error: 'not_found' });
+  res.json({ photos: (readJSON(F.album, {})[e.id] || []) });
+});
+app.post('/api/public/event/:slug/album', albumUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+  let out;
+  await withLock(() => {
+    const e = Object.values(readJSON(F.events, {})).find(x => x.slug === req.params.slug);
+    if (!e) { out = { err: 'not_found' }; return; }
+    const a = readJSON(F.album, {}); a[e.id] = a[e.id] || [];
+    if (a[e.id].length >= 400) { out = { err: 'full' }; return; }
+    const entry = { url: '/uploads/' + req.file.filename, by: String((req.body || {}).by || '').slice(0, 60), ts: Date.now() };
+    a[e.id].unshift(entry); writeJSON(F.album, a);
+    out = { photo: entry };
+  });
+  if (out.err === 'not_found') return res.status(404).json({ error: 'not_found' });
+  if (out.err === 'full') return res.status(413).json({ error: 'album_full' });
+  res.json(out);
 });
 
 const PORT = process.env.PORT || 3000;
